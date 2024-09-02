@@ -19,7 +19,7 @@ REPO_URL = f"https://{GITHUB_TOKEN}@github.com/toddllm/softwarecompanyinabox.git
 DOCKER_IMAGE = "softwarecompanyinabox:latest"
 CONTAINER_NAME = "softwarecompanyinabox"
 DOCKER_PORT = 3000
-HOST_PORT = 8080
+HOST_PORT = 3000 
 NGINX_CONFIG_PATH = "/etc/nginx/sites-available/softwarecompanyinabox"
 
 # SSH command to execute the deployment steps
