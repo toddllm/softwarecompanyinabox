@@ -7,7 +7,7 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install --production
+RUN npm install express
 
 # Copy the rest of the application code
 COPY . .
@@ -15,5 +15,6 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 3000
 
-# Define the command to run the app
-CMD ["node", "scripts.js"]
+# Start the server
+CMD ["node", "server.js"]
+
