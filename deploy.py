@@ -5,7 +5,7 @@ import sys
 def run_remote_command(command, timeout=60):
     print(f"Running command:\n{command}")
     try:
-        result = subprocess.run(f"ssh -v aws-vm1 '{command}'", shell=True, text=True, capture_output=True, timeout=timeout)
+        result = subprocess.run(f"ssh  aws-vm1 '{command}'", shell=True, text=True, capture_output=True, timeout=timeout)
         print(f"STDOUT:\n{result.stdout}")
         print(f"STDERR:\n{result.stderr}")
         if result.returncode != 0:
