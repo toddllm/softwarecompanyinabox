@@ -5,7 +5,7 @@ import sys
 def run_remote_command(command, timeout=60):
     print(f"Running command:\n{command}")
     try:
-        result = subprocess.run(f"ssh  aws-vm1 '{command}'", shell=True, text=True, capture_output=True, timeout=timeout)
+        result = subprocess.run(f"ssh aws-vm1 \"{command}\"", shell=True, text=True, capture_output=True, timeout=timeout)
         print(f"STDOUT:\n{result.stdout}")
         print(f"STDERR:\n{result.stderr}")
         if result.returncode != 0:
@@ -84,21 +84,24 @@ if not service_listening:
 print("Checking and updating Nginx configuration...")
 nginx_config_exists = run_remote_command(f"if [ -f {NGINX_CONFIG_PATH} ]; then echo exists; fi")
 if nginx_config_exists:
-    proxy_config_exists = run_remote_command(f"grep -q 'proxy_pass http://localhost:{DOCKER_PORT};' {NGINX_CONFIG_PATH}")
-    if not proxy_config_exists:
+    print("Nginx configuration exists, checking for proxy pass settings...")
+    proxy_config_exists = run_remote_command(f"grep -q 'proxy_pass http://localhost:{DOCKER_PORT};' {NGINX_CONFIG_PATH} && echo 'Proxy pass found' || echo 'Proxy pass missing'")
+    if "Proxy pass missing" in proxy_config_exists:
+        print("Proxy pass setting not found, updating Nginx configuration...")
         run_remote_command(f"""
             sudo tee -a {NGINX_CONFIG_PATH} > /dev/null <<EOL
 location / {{
     proxy_pass http://localhost:{DOCKER_PORT};
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
 }}
 EOL
             sudo systemctl reload nginx
         """)
 else:
+    print("Nginx configuration does not exist, creating it...")
     run_remote_command(f"""
         sudo tee {NGINX_CONFIG_PATH} > /dev/null <<EOL
 server {{
@@ -107,10 +110,10 @@ server {{
 
     location / {{
         proxy_pass http://localhost:{DOCKER_PORT};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }}
 }}
 EOL
