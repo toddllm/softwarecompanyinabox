@@ -50,6 +50,18 @@ ssh aws-vm1 << EOF
     # Run the Docker container on a different port
     sudo docker run -d --name {CONTAINER_NAME} -p {HOST_PORT}:{DOCKER_PORT} {DOCKER_IMAGE}
 
+    # Check if the Docker container is running
+    if ! sudo docker ps -q -f name={CONTAINER_NAME}; then
+        echo "Error: Docker container {CONTAINER_NAME} is not running."
+        exit 1
+    fi
+
+    # Check if the service inside the container is listening on the expected port
+    if ! sudo docker exec {CONTAINER_NAME} netstat -tuln | grep -q ":$DOCKER_PORT"; then
+        echo "Error: Service inside the Docker container is not listening on port {DOCKER_PORT}."
+        exit 1
+    fi
+
     # Check if Nginx config exists
     if [ -f "{NGINX_CONFIG_PATH}" ]; then
         if ! grep -q "proxy_pass http://localhost:{DOCKER_PORT};" "{NGINX_CONFIG_PATH}"; then
@@ -82,6 +94,14 @@ EOL
         sudo ln -s "{NGINX_CONFIG_PATH}" /etc/nginx/sites-enabled/
         sudo systemctl reload nginx
     fi
+
+    # Check if Nginx is running and listening on the expected port
+    if ! sudo netstat -tuln | grep -q ":80"; then
+        echo "Error: Nginx is not running or not listening on port 80."
+        exit 1
+    fi
+
+    echo "Deployment completed successfully. All checks passed."
 EOF
 """
 
