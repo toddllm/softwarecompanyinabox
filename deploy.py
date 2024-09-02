@@ -23,90 +23,97 @@ HOST_PORT = 3000
 NGINX_CONFIG_PATH = "/etc/nginx/sites-available/softwarecompanyinabox"
 
 # SSH command to execute the deployment steps
-ssh_command = r"""
-ssh aws-vm1 << 'EOF'
-    APP_DIR=\$(pwd)/softwarecompanyinabox
+def run_remote_command(command):
+    result = subprocess.run(f"ssh aws-vm1 {command}", shell=True, text=True, capture_output=True)
+    if result.returncode != 0:
+        print(f"Error running command: {command}")
+        print(result.stderr)
+        sys.exit(1)
+    return result.stdout.strip()
 
-    # Ensure the application directory exists
-    if [ -d "\$APP_DIR" ]; then
-        cd \$APP_DIR
-        git pull origin main
+# Ensure the application directory exists and pull the latest changes
+run_remote_command(f"""
+    if [ -d softwarecompanyinabox ]; then
+        cd softwarecompanyinabox && git pull origin main
     else
-        git clone {REPO_URL} \$APP_DIR
-        cd \$APP_DIR
+        git clone {REPO_URL} softwarecompanyinabox
     fi
+""")
 
-    # Build the Docker image
-    sudo docker build -t {DOCKER_IMAGE} .
+# Build the Docker image
+run_remote_command(f"""
+    cd softwarecompanyinabox && sudo docker build -t {DOCKER_IMAGE} .
+""")
 
-    # Stop the existing container if it exists
-    if [ \$(sudo docker ps -aq -f name={CONTAINER_NAME}) ]; then
-        if [ \$(sudo docker ps -q -f name={CONTAINER_NAME}) ]; then
-            sudo docker stop {CONTAINER_NAME}
-        fi
+# Stop and remove the existing Docker container if it exists
+existing_container = run_remote_command(f"sudo docker ps -aq -f name={CONTAINER_NAME}")
+if existing_container:
+    run_remote_command(f"""
+        sudo docker stop {CONTAINER_NAME}
         sudo docker rm {CONTAINER_NAME}
-    fi
+    """)
 
-    # Run the Docker container on a different port
+# Run the Docker container
+run_remote_command(f"""
     sudo docker run -d --name {CONTAINER_NAME} -p {HOST_PORT}:{DOCKER_PORT} {DOCKER_IMAGE}
+""")
 
-    # Check if the Docker container is running
-    if ! sudo docker ps -q -f name={CONTAINER_NAME}; then
-        echo "Error: Docker container {CONTAINER_NAME} is not running."
-        exit 1
-    fi
+# Check if the Docker container is running
+container_running = run_remote_command(f"sudo docker ps -q -f name={CONTAINER_NAME}")
+if not container_running:
+    print(f"Error: Docker container {CONTAINER_NAME} is not running.")
+    sys.exit(1)
 
-    # Check if the service inside the container is listening on the expected port
-    if ! sudo docker exec {CONTAINER_NAME} netstat -tuln | grep -q ":{DOCKER_PORT}"; then
-        echo "Error: Service inside the Docker container is not listening on port {DOCKER_PORT}."
-        echo "Docker container logs:"
-        sudo docker logs {CONTAINER_NAME}
-        exit 1
-    fi
+# Check if the service inside the container is listening on the expected port
+service_listening = run_remote_command(f"sudo docker exec {CONTAINER_NAME} netstat -tuln | grep :{DOCKER_PORT}")
+if not service_listening:
+    print(f"Error: Service inside the Docker container is not listening on port {DOCKER_PORT}.")
+    print("Docker container logs:")
+    print(run_remote_command(f"sudo docker logs {CONTAINER_NAME}"))
+    sys.exit(1)
 
-    # Check if Nginx config exists
-    if [ -f "{NGINX_CONFIG_PATH}" ]; then
-        if ! grep -q "proxy_pass http://localhost:{DOCKER_PORT};" "{NGINX_CONFIG_PATH}"; then
-            sudo tee -a "{NGINX_CONFIG_PATH}" > /dev/null << EOL
+# Update Nginx configuration if necessary
+nginx_config_exists = run_remote_command(f"if [ -f {NGINX_CONFIG_PATH} ]; then echo exists; fi")
+if nginx_config_exists:
+    proxy_config_exists = run_remote_command(f"grep -q 'proxy_pass http://localhost:{DOCKER_PORT};' {NGINX_CONFIG_PATH}")
+    if not proxy_config_exists:
+        run_remote_command(f"""
+            sudo tee -a {NGINX_CONFIG_PATH} > /dev/null <<EOL
 location / {{
     proxy_pass http://localhost:{DOCKER_PORT};
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }}
 EOL
             sudo systemctl reload nginx
-        fi
-    else
-        sudo tee "{NGINX_CONFIG_PATH}" > /dev/null << EOL
+        """)
+else:
+    run_remote_command(f"""
+        sudo tee {NGINX_CONFIG_PATH} > /dev/null <<EOL
 server {{
     listen 80;
     server_name softwarecompanyinabox.com www.softwarecompanyinabox.com;
 
     location / {{
         proxy_pass http://localhost:{DOCKER_PORT};
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }}
 }}
 EOL
-        sudo ln -s "{NGINX_CONFIG_PATH}" /etc/nginx/sites-enabled/
+        sudo ln -s {NGINX_CONFIG_PATH} /etc/nginx/sites-enabled/
         sudo systemctl reload nginx
-    fi
+    """)
 
-    # Check if Nginx is running and listening on the expected port
-    if ! sudo netstat -tuln | grep -q ":80"; then
-        echo "Error: Nginx is not running or not listening on port 80."
-        exit 1
-    fi
+# Check if Nginx is running and listening on port 80
+nginx_listening = run_remote_command("sudo netstat -tuln | grep :80")
+if not nginx_listening:
+    print("Error: Nginx is not running or not listening on port 80.")
+    sys.exit(1)
 
-    echo "Deployment completed successfully. All checks passed."
-EOF
-"""
-
-# Execute the SSH command
-subprocess.run(ssh_command, shell=True, check=True)
+print("Deployment completed successfully. All checks passed.")
 
