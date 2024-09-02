@@ -2,15 +2,20 @@ import os
 import subprocess
 import sys
 
-def run_remote_command(command):
-    print(f"Running command: {command}")
-    result = subprocess.run(f"ssh aws-vm1 {command}", shell=True, text=True, capture_output=True)
-    print(f"STDOUT:\n{result.stdout}")
-    print(f"STDERR:\n{result.stderr}")
-    if result.returncode != 0:
-        print(f"Error running command: {command}")
+def run_remote_command(command, timeout=60):
+    print(f"Running command:\n{command}")
+    try:
+        result = subprocess.run(f"ssh -v aws-vm1 {command}", shell=True, text=True, capture_output=True, timeout=timeout)
+        print(f"STDOUT:\n{result.stdout}")
+        print(f"STDERR:\n{result.stderr}")
+        if result.returncode != 0:
+            print(f"Error running command: {command}")
+            sys.exit(1)
+        return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        print(f"Command timed out: {command}")
         sys.exit(1)
-    return result.stdout.strip()
+
 
 # Load environment variables securely
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
