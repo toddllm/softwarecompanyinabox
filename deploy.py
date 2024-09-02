@@ -5,7 +5,7 @@ import sys
 def run_remote_command(command, timeout=60):
     print(f"Running command:\n{command}")
     try:
-        result = subprocess.run(f"ssh -v aws-vm1 {command}", shell=True, text=True, capture_output=True, timeout=timeout)
+        result = subprocess.run(f"ssh -v aws-vm1 '{command}'", shell=True, text=True, capture_output=True, timeout=timeout)
         print(f"STDOUT:\n{result.stdout}")
         print(f"STDERR:\n{result.stderr}")
         if result.returncode != 0:
@@ -15,7 +15,6 @@ def run_remote_command(command, timeout=60):
     except subprocess.TimeoutExpired:
         print(f"Command timed out: {command}")
         sys.exit(1)
-
 
 # Load environment variables securely
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -41,11 +40,8 @@ NGINX_CONFIG_PATH = "/etc/nginx/sites-available/softwarecompanyinabox"
 # Ensure the application directory exists and pull the latest changes
 print("Ensuring application directory exists and pulling latest changes...")
 run_remote_command(f"""
-    if [ -d softwarecompanyinabox ]; then
-        cd softwarecompanyinabox && git pull origin main
-    else
-        git clone {REPO_URL} softwarecompanyinabox
-    fi
+    if [ -d softwarecompanyinabox ]; then cd softwarecompanyinabox && git pull origin main;
+    else git clone {REPO_URL} softwarecompanyinabox; fi
 """)
 
 # Build the Docker image
@@ -59,8 +55,7 @@ print("Stopping and removing existing Docker container (if any)...")
 existing_container = run_remote_command(f"sudo docker ps -aq -f name={CONTAINER_NAME}")
 if existing_container:
     run_remote_command(f"""
-        sudo docker stop {CONTAINER_NAME}
-        sudo docker rm {CONTAINER_NAME}
+        sudo docker stop {CONTAINER_NAME}; sudo docker rm {CONTAINER_NAME}
     """)
 
 # Run the Docker container
@@ -119,8 +114,7 @@ server {{
     }}
 }}
 EOL
-        sudo ln -s {NGINX_CONFIG_PATH} /etc/nginx/sites-enabled/
-        sudo systemctl reload nginx
+        sudo ln -s {NGINX_CONFIG_PATH} /etc/nginx/sites-enabled/; sudo systemctl reload nginx
     """)
 
 # Check if Nginx is running and listening on port 80
