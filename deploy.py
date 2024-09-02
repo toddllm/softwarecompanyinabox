@@ -19,12 +19,12 @@ REPO_URL = f"https://{GITHUB_TOKEN}@github.com/toddllm/softwarecompanyinabox.git
 DOCKER_IMAGE = "softwarecompanyinabox:latest"
 CONTAINER_NAME = "softwarecompanyinabox"
 DOCKER_PORT = 3000
-HOST_PORT = 3000 
+HOST_PORT = 3000
 NGINX_CONFIG_PATH = "/etc/nginx/sites-available/softwarecompanyinabox"
 
 # SSH command to execute the deployment steps
-ssh_command = f"""
-ssh aws-vm1 << EOF
+ssh_command = r"""
+ssh aws-vm1 << 'EOF'
     APP_DIR=\$(pwd)/softwarecompanyinabox
 
     # Ensure the application directory exists
@@ -57,15 +57,17 @@ ssh aws-vm1 << EOF
     fi
 
     # Check if the service inside the container is listening on the expected port
-    if ! sudo docker exec {CONTAINER_NAME} netstat -tuln | grep -q ":$DOCKER_PORT"; then
+    if ! sudo docker exec {CONTAINER_NAME} netstat -tuln | grep -q ":{DOCKER_PORT}"; then
         echo "Error: Service inside the Docker container is not listening on port {DOCKER_PORT}."
+        echo "Docker container logs:"
+        sudo docker logs {CONTAINER_NAME}
         exit 1
     fi
 
     # Check if Nginx config exists
     if [ -f "{NGINX_CONFIG_PATH}" ]; then
         if ! grep -q "proxy_pass http://localhost:{DOCKER_PORT};" "{NGINX_CONFIG_PATH}"; then
-            sudo tee -a "{NGINX_CONFIG_PATH}" > /dev/null <<EOL
+            sudo tee -a "{NGINX_CONFIG_PATH}" > /dev/null << EOL
 location / {{
     proxy_pass http://localhost:{DOCKER_PORT};
     proxy_set_header Host \$host;
@@ -77,7 +79,7 @@ EOL
             sudo systemctl reload nginx
         fi
     else
-        sudo tee "{NGINX_CONFIG_PATH}" > /dev/null <<EOL
+        sudo tee "{NGINX_CONFIG_PATH}" > /dev/null << EOL
 server {{
     listen 80;
     server_name softwarecompanyinabox.com www.softwarecompanyinabox.com;
